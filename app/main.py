@@ -16,7 +16,7 @@ from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 
-load_dotenv(Path(__file__).with_name(".env"))
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 app = FastAPI(
     title="Power BI Parquet API",
@@ -106,9 +106,46 @@ DESCONTOS = tuple(
     (Decimal(indice) * Decimal("0.025")).quantize(Decimal("0.001"))
     for indice in range(4)
 )
-QUANTIDADE_PEDIDOS = 200_000
-INICIO_PEDIDOS = datetime(2024, 1, 1)
-FIM_PEDIDOS = datetime(2027, 1, 1)
+
+
+def obter_inteiro_positivo(nome: str, padrao: int) -> int:
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+
+    try:
+        resultado = int(valor)
+    except ValueError as erro:
+        raise RuntimeError(f"{nome} deve ser um numero inteiro.") from erro
+
+    if resultado <= 0:
+        raise RuntimeError(f"{nome} deve ser maior que zero.")
+    return resultado
+
+
+def obter_data_hora(nome: str, padrao: datetime) -> datetime:
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+
+    try:
+        resultado = datetime.fromisoformat(valor)
+    except ValueError as erro:
+        raise RuntimeError(
+            f"{nome} deve usar o formato ISO 8601, por exemplo 2024-01-01."
+        ) from erro
+
+    if resultado.tzinfo is not None:
+        raise RuntimeError(f"{nome} nao deve conter fuso horario.")
+    return resultado
+
+
+QUANTIDADE_PEDIDOS = obter_inteiro_positivo("QUANTIDADE_PEDIDOS", 20_000_000)
+INICIO_PEDIDOS = obter_data_hora("INICIO_PEDIDOS", datetime(2024, 1, 1))
+FIM_PEDIDOS = obter_data_hora("FIM_PEDIDOS", datetime(2027, 1, 1))
+
+if INICIO_PEDIDOS >= FIM_PEDIDOS:
+    raise RuntimeError("INICIO_PEDIDOS deve ser anterior a FIM_PEDIDOS.")
 
 
 def criar_pedidos() -> list[tuple[object, ...]]:
