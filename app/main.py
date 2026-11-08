@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import random
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -101,48 +102,67 @@ PRODUTOS = [
     ("Caixa organizadora reforcada", Decimal("72.30")),
 ]
 STATUS_PEDIDOS = ("aprovado", "pendente", "cancelado", "finalizado")
+DESCONTOS = tuple(
+    (Decimal(indice) * Decimal("0.025")).quantize(Decimal("0.001"))
+    for indice in range(4)
+)
+QUANTIDADE_PEDIDOS = 200_000
+INICIO_PEDIDOS = datetime(2024, 1, 1)
+FIM_PEDIDOS = datetime(2027, 1, 1)
 
 
 def criar_pedidos() -> list[tuple[object, ...]]:
     pedidos: list[tuple[object, ...]] = []
-    inicio = datetime(2021, 1, 5, 8, 20)
+    gerador = random.Random()
+    intervalo_segundos = int((FIM_PEDIDOS - INICIO_PEDIDOS).total_seconds())
 
-    for indice in range(72):
-        pedido_id = indice + 1
-        data_hora = inicio + timedelta(
-            days=indice * 30 + indice // 3,
-            hours=(indice * 3) % 9,
-            minutes=(indice * 7) % 60,
+    for pedido_id in range(1, QUANTIDADE_PEDIDOS + 1):
+        data_hora = INICIO_PEDIDOS + timedelta(
+            seconds=gerador.randrange(intervalo_segundos)
         )
-        descricao, valor_unitario = PRODUTOS[indice % len(PRODUTOS)]
-        quantidade = (indice * 5) % 24 + 1
-        status_pedido = STATUS_PEDIDOS[indice % len(STATUS_PEDIDOS)]
-        desconto = (Decimal(indice % 4) * Decimal("0.025")).quantize(Decimal("0.001"))
+        descricao, valor_unitario = gerador.choice(PRODUTOS)
+        quantidade = gerador.randint(1, 24)
+        status_pedido = gerador.choice(STATUS_PEDIDOS)
+        desconto = gerador.choice(DESCONTOS)
         valor_total = (
             valor_unitario * quantidade * (Decimal("1") - desconto)
         ).quantize(Decimal("0.01"))
         observacao = None
-        if indice % 9 == 0:
+        if gerador.randrange(9) == 0:
             observacao = "Entrega agendada com o cliente"
         elif status_pedido == "cancelado":
             observacao = "Cancelado antes da separacao"
 
+        if status_pedido == "cancelado":
+            quantidade_embalada = 0
+        elif status_pedido == "pendente":
+            quantidade_embalada = gerador.randint(0, quantidade)
+        else:
+            quantidade_embalada = quantidade
+
+        updated_at = min(
+            data_hora + timedelta(
+                seconds=gerador.randint(2 * 60 * 60, 18 * 24 * 60 * 60)
+            ),
+            FIM_PEDIDOS - timedelta(microseconds=1),
+        )
+
         pedidos.append(
             (
                 pedido_id,
-                indice % len(CLIENTES_DATA) + 1,
-                f"PED-{data_hora.year}-{pedido_id:05d}",
+                gerador.randint(1, len(CLIENTES_DATA)),
+                f"PED-{data_hora.year}-{pedido_id:06d}",
                 descricao,
                 quantidade,
-                0 if status_pedido == "cancelado" else quantidade,
+                quantidade_embalada,
                 valor_unitario,
                 float(desconto),
                 float(valor_total),
                 status_pedido in {"aprovado", "finalizado"},
                 data_hora.date(),
                 data_hora,
-                data_hora + timedelta(days=indice % 18, hours=2),
-                time(8 + indice % 9, (indice * 11) % 60),
+                updated_at,
+                time(gerador.randint(8, 16), gerador.randint(0, 59)),
                 status_pedido,
                 observacao,
             )
