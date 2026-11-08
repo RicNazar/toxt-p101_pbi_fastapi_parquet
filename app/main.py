@@ -140,20 +140,24 @@ def obter_data_hora(nome: str, padrao: datetime) -> datetime:
     return resultado
 
 
-QUANTIDADE_PEDIDOS = obter_inteiro_positivo("QUANTIDADE_PEDIDOS", 20_000_000)
+QUANTIDADE_PEDIDOS = obter_inteiro_positivo("QUANTIDADE_PEDIDOS", 1_000_000)
 INICIO_PEDIDOS = obter_data_hora("INICIO_PEDIDOS", datetime(2024, 1, 1))
 FIM_PEDIDOS = obter_data_hora("FIM_PEDIDOS", datetime(2027, 1, 1))
+TAMANHO_LOTE_PEDIDOS = 50_000
 
 if INICIO_PEDIDOS >= FIM_PEDIDOS:
     raise RuntimeError("INICIO_PEDIDOS deve ser anterior a FIM_PEDIDOS.")
 
 
-def criar_pedidos() -> list[tuple[object, ...]]:
+def criar_lote_pedidos(
+    gerador: random.Random,
+    primeiro_id: int,
+    ultimo_id: int,
+    intervalo_segundos: int,
+) -> pl.DataFrame:
     pedidos: list[tuple[object, ...]] = []
-    gerador = random.Random()
-    intervalo_segundos = int((FIM_PEDIDOS - INICIO_PEDIDOS).total_seconds())
 
-    for pedido_id in range(1, QUANTIDADE_PEDIDOS + 1):
+    for pedido_id in range(primeiro_id, ultimo_id):
         data_hora = INICIO_PEDIDOS + timedelta(
             seconds=gerador.randrange(intervalo_segundos)
         )
@@ -205,14 +209,36 @@ def criar_pedidos() -> list[tuple[object, ...]]:
             )
         )
 
-    return pedidos
+    return pl.DataFrame(
+        pedidos,
+        schema=PEDIDOS_SCHEMA,
+        orient="row",
+    )
 
 
-tabPedidos = pl.DataFrame(
-    criar_pedidos(),
-    schema=PEDIDOS_SCHEMA,
-    orient="row",
-)
+def criar_pedidos() -> pl.DataFrame:
+    gerador = random.Random()
+    intervalo_segundos = int((FIM_PEDIDOS - INICIO_PEDIDOS).total_seconds())
+    lotes: list[pl.DataFrame] = []
+
+    for primeiro_id in range(1, QUANTIDADE_PEDIDOS + 1, TAMANHO_LOTE_PEDIDOS):
+        ultimo_id = min(
+            primeiro_id + TAMANHO_LOTE_PEDIDOS,
+            QUANTIDADE_PEDIDOS + 1,
+        )
+        lotes.append(
+            criar_lote_pedidos(
+                gerador,
+                primeiro_id,
+                ultimo_id,
+                intervalo_segundos,
+            )
+        )
+
+    return pl.concat(lotes, rechunk=False)
+
+
+tabPedidos = criar_pedidos()
 
 
 def autenticar(
